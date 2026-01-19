@@ -106,13 +106,13 @@ const Login = () => {
             }
         };
 
-        if (!CLIENT_ID || CLIENT_ID === "YOUR_GOOGLE_CLIENT_ID_HERE") {
-            setError("Please configure your Google Client ID in Login.jsx to enable real sign-in.");
-        } else {
+        if (CLIENT_ID) {
             setError(null); // Clear any previous error
             initGoogle();
+        } else {
+            setError("Google Client ID is not configured. Please check your environment variables.");
         }
-    }, []);
+    }, [CLIENT_ID]);
 
     React.useEffect(() => {
         if (localStorage.getItem('isAuthenticated') === 'true') {
