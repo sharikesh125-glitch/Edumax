@@ -14,6 +14,8 @@ const PdfViewer = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const API_URL = import.meta.env.VITE_API_URL || '/api';
+    const UPI_ID = import.meta.env.VITE_UPI_ID || 'edumax@upi';
+    const UPI_NAME = import.meta.env.VITE_UPI_NAME || 'Edumax';
 
     const [numPages, setNumPages] = useState(null);
     const [pdfMetadata, setPdfMetadata] = useState(null);
@@ -21,10 +23,15 @@ const PdfViewer = () => {
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [metadataLoaded, setMetadataLoaded] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [utrId, setUtrId] = useState('');
+    const [paymentRequestStatus, setPaymentRequestStatus] = useState(null); // 'pending', 'approved', 'rejected'
     const [containerWidth, setContainerWidth] = useState(window.innerWidth);
     const [pageWidth, setPageWidth] = useState(window.innerWidth > 800 ? 800 : window.innerWidth - 30);
+    const [isWindowFocused, setIsWindowFocused] = useState(true);
+    const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
     const containerRef = React.useRef(null);
     const isAdmin = localStorage.getItem('role') === 'admin';
+    const userEmail = localStorage.getItem('userEmail') || 'Secure User';
 
     // Handle Responsive Resize with Ref
     useEffect(() => {
@@ -88,7 +95,7 @@ const PdfViewer = () => {
         checkPurchaseStatus();
     }, [id, API_URL]);
 
-    // Injection of modal animation
+    // Injection of modal and watermark animations
     useEffect(() => {
         const style = document.createElement('style');
         style.innerHTML = `
@@ -96,26 +103,70 @@ const PdfViewer = () => {
                 from { opacity: 0; transform: translateY(20px); }
                 to { opacity: 1; transform: translateY(0); }
             }
+            .watermark-overlay {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                pointer-events: none;
+                z-index: 5;
+                overflow: hidden;
+                opacity: 0.15;
+                font-size: 14px;
+                color: #ccc;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 100px;
+                justify-content: center;
+                align-content: center;
+                user-select: none;
+            }
+            .blur-protection {
+                filter: blur(60px) grayscale(100%);
+                transition: filter 0.1s ease;
+            }
+            .moving-watermark {
+                position: fixed;
+                pointer-events: none;
+                z-index: 9999;
+                font-size: 12px;
+                font-weight: bold;
+                color: rgba(255, 255, 255, 0.4);
+                background: rgba(0, 0, 0, 0.2);
+                padding: 4px 10px;
+                border-radius: 20px;
+                white-space: nowrap;
+                backdrop-filter: blur(2px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                transition: transform 0.05s linear;
+            }
         `;
         document.head.appendChild(style);
         return () => document.head.removeChild(style);
     }, []);
 
-    // Injection of Razorpay Payment Button
+    // Check for existing payment request
     useEffect(() => {
-        if (showPaymentModal) {
-            const container = document.getElementById('razorpay-button-container');
-            // Clear container before adding script
-            if (container) {
-                container.innerHTML = '';
-                const script = document.createElement('script');
-                script.src = "https://checkout.razorpay.com/v1/payment-button.js";
-                script.setAttribute("data-payment_button_id", "pl_S5SdlSBYBNavF6");
-                script.async = true;
-                container.appendChild(script);
+        const checkRequestStatus = async () => {
+            const userEmail = localStorage.getItem('userEmail');
+            if (userEmail && id) {
+                try {
+                    const response = await fetch(`${API_URL}/payment-requests/status?email=${userEmail}&pdfId=${id}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        setPaymentRequestStatus(data.status);
+                    }
+                } catch (err) {
+                    console.warn('Failed to check payment request status');
+                }
             }
+        };
+
+        if (showPaymentModal || !isPaid) {
+            checkRequestStatus();
         }
-    }, [showPaymentModal]);
+    }, [id, API_URL, showPaymentModal, isPaid]);
 
     // Industry standard worker configuration for Vite
     useEffect(() => {
@@ -166,75 +217,114 @@ const PdfViewer = () => {
         setNumPages(numPages);
     };
 
-    const handlePayment = () => {
+    const submitPaymentRequest = async () => {
+        if (!utrId.trim()) {
+            alert("Please enter a valid Transaction ID / UTR.");
+            return;
+        }
+
         setIsLoading(true);
-        setTimeout(async () => {
-            const userEmail = localStorage.getItem('userEmail');
+        const userEmail = localStorage.getItem('userEmail');
+        const userName = localStorage.getItem('userName') || 'User';
 
-            // 1. Update LocalStorage
-            const purchases = JSON.parse(localStorage.getItem('edumax_purchases') || '[]');
-            if (!purchases.includes(id)) {
-                purchases.push(id);
-                localStorage.setItem('edumax_purchases', JSON.stringify(purchases));
+        try {
+            const response = await fetch(`${API_URL}/payment-requests`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: userEmail,
+                    name: userName,
+                    pdfId: id,
+                    pdfTitle: pdfMetadata?.title,
+                    utrId: utrId,
+                    amount: pdfMetadata?.price
+                })
+            });
+
+            if (response.ok) {
+                setPaymentRequestStatus('pending');
+                alert("✅ Payment Request Submitted! Admin will verify your UTR and unlock the PDF soon.");
+            } else {
+                const data = await response.json();
+                alert(`❌ Error: ${data.error || 'Failed to submit request'}`);
             }
-
-            // 2. Update Database (only if logged in)
-            if (userEmail) {
-                try {
-                    await fetch(`${API_URL}/purchases`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email: userEmail, pdfId: id })
-                    });
-                    console.log('✅ Purchase successfully saved to database for:', userEmail);
-                } catch (err) {
-                    console.error('Failed to save purchase to database');
-                }
-            }
-
-            console.log('✅ Payment simulation successful. Unlocking document:', id);
-            setIsPaid(true);
-            setShowPaymentModal(false);
+        } catch (err) {
+            alert("❌ Network error. Please try again.");
+        } finally {
             setIsLoading(false);
-            alert("✨ Payment Successful! All pages are now unlocked and saved to your account.");
-        }, 1500);
+        }
     };
 
-    // Prevent right click, print, and common save/inspect shortcuts
+    // Aggressive security handlers
     useEffect(() => {
         const handleContextMenu = (e) => e.preventDefault();
+        const handleCopy = (e) => {
+            e.preventDefault();
+            navigator.clipboard.writeText('Protected Content - Edumax');
+        };
+        const handleVisibilityChange = () => {
+            setIsWindowFocused(!document.hidden);
+        };
+        const handleBlur = () => setIsWindowFocused(false);
+        const handleFocus = () => setIsWindowFocused(true);
+        const handleMouseLeave = () => setIsWindowFocused(false);
+        const handleMouseEnter = () => setIsWindowFocused(true);
+        const handleMouseMove = (e) => {
+            setMousePos({ x: e.clientX, y: e.clientY });
+        };
+
         const handleKeyDown = (e) => {
-            // Block Ctrl+P (Print)
-            if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
-                e.preventDefault();
-                alert('Printing is disabled for security.');
+            // Block PrintScreen specifically
+            if (e.key === 'PrintScreen' || e.keyCode === 44) {
+                setIsWindowFocused(false);
+                navigator.clipboard.writeText('Screenshots are prohibited.');
+                alert('SCREENSHOT ATTEMPT DETECTED: Content hidden.');
             }
-            // Block Ctrl+S (Save)
-            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+
+            // Existing blocks
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 's' || e.key === 'u' || e.key === 'c')) {
                 e.preventDefault();
-                alert('Saving is disabled for security.');
+                return false;
             }
-            // Block Ctrl+U (View Source)
-            if ((e.ctrlKey || e.metaKey) && e.key === 'u') {
-                e.preventDefault();
-            }
-            // Block F12 (Dev Tools)
-            if (e.key === 'F12') {
-                e.preventDefault();
-            }
-            // Block Ctrl+Shift+I (Dev Tools)
-            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'i') {
+
+            // Block DevTools shortcuts
+            if (e.key === 'F12' ||
+                ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c'))
+            ) {
                 e.preventDefault();
             }
         };
+
+        // Periodic clipboard scavenger (clears any content copied by system tools)
+        const scavenger = setInterval(() => {
+            if (!isWindowFocused) {
+                navigator.clipboard.writeText('Security Clearance Active');
+            }
+        }, 1000);
 
         document.addEventListener('contextmenu', handleContextMenu);
         document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('copy', handleCopy);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        document.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('blur', handleBlur);
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('mouseleave', handleMouseLeave);
+        document.addEventListener('mouseenter', handleMouseEnter);
+
         return () => {
+            clearInterval(scavenger);
             document.removeEventListener('contextmenu', handleContextMenu);
             document.removeEventListener('keydown', handleKeyDown);
+            document.removeEventListener('copy', handleCopy);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            document.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('blur', handleBlur);
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('mouseleave', handleMouseLeave);
+            document.removeEventListener('mouseenter', handleMouseEnter);
         };
-    }, []);
+    }, [isWindowFocused]);
 
     if (!metadataLoaded) {
         return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
@@ -248,9 +338,22 @@ const PdfViewer = () => {
             background: 'var(--bg-primary)',
             display: 'flex',
             flexDirection: 'column',
-            userSelect: 'none', // CSS Protection
-            WebkitUserSelect: 'none'
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+            msUserSelect: 'none',
+            MozUserSelect: 'none'
         }}>
+            {/* Dynamic Moving Watermark (Deterrent) */}
+            {isWindowFocused && (
+                <div
+                    className="moving-watermark"
+                    style={{
+                        transform: `translate(${mousePos.x + 20}px, ${mousePos.y + 20}px)`
+                    }}
+                >
+                    {userEmail} • SECURE ACCESS • {new Date().toLocaleTimeString()}
+                </div>
+            )}
             {/* Header */}
             <div className="glass" style={{
                 padding: 'var(--space-sm) var(--space-md)',
@@ -316,7 +419,7 @@ const PdfViewer = () => {
                 style={{
                     flex: 1,
                     overflowY: 'auto',
-                    overflowX: 'hidden', // Extra protection against "spreading"
+                    overflowX: 'hidden',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -324,7 +427,31 @@ const PdfViewer = () => {
                     position: 'relative',
                     backgroundColor: '#525659'
                 }}
+                className={!isWindowFocused ? 'blur-protection' : ''}
             >
+                {!isWindowFocused && (
+                    <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        zIndex: 1000,
+                        background: 'rgba(0,0,0,0.8)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        textAlign: 'center'
+                    }}>
+                        <div className="glass" style={{ padding: '30px', borderRadius: '20px', border: '1px solid var(--accent)' }}>
+                            <ShieldAlert size={48} style={{ color: 'var(--accent)', marginBottom: '15px' }} />
+                            <h2>Content Protected</h2>
+                            <p style={{ marginTop: '10px' }}>Please focus on this window to view the secure document.</p>
+                            <Button variant="primary" style={{ marginTop: '20px' }} onClick={() => window.focus()}>Resume Viewing</Button>
+                        </div>
+                    </div>
+                )}
                 <Document
                     file={pdfFile}
                     onLoadSuccess={onDocumentLoadSuccess}
@@ -409,12 +536,21 @@ const PdfViewer = () => {
                                 renderAnnotationLayer={false}
                                 width={pageWidth}
                             />
+
+                            {/* Dynamic User Watermark */}
+                            <div className="watermark-overlay">
+                                {Array.from({ length: 12 }).map((_, i) => (
+                                    <div key={i} style={{ transform: 'rotate(-30deg)', whiteSpace: 'nowrap' }}>
+                                        {userEmail} • EDUMAX SECURE • {new Date().toLocaleDateString()}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     ))}
                 </Document>
             </div>
 
-            {/* Razorpay Simulation Modal */}
+            {/* Manual Payment Modal */}
             {showPaymentModal && (
                 <div style={{
                     position: 'fixed',
@@ -427,87 +563,166 @@ const PdfViewer = () => {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    backdropFilter: 'blur(8px)'
+                    backdropFilter: 'blur(8px)',
+                    padding: '20px'
                 }}>
                     <div style={{
-                        background: 'white',
-                        borderRadius: '12px',
-                        width: '420px',
+                        background: 'var(--bg-card)',
+                        borderRadius: '20px',
+                        width: '100%',
+                        maxWidth: '450px',
                         overflow: 'hidden',
-                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
-                        animation: 'modalSlideUp 0.3s ease-out'
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                        animation: 'modalSlideUp 0.3s ease-out',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        position: 'relative'
                     }}>
-                        {/* Razorpay Header */}
-                        <div style={{
-                            background: '#3392FF',
-                            padding: 'var(--space-md) var(--space-lg)',
-                            color: 'white',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
-                        }}>
-                            <div>
-                                <div style={{ fontSize: '0.7rem', opacity: 0.8, textTransform: 'uppercase', letterSpacing: '1px' }}>Payment for</div>
-                                <div style={{ fontWeight: '600', fontSize: '1.1rem' }}>{pdfMetadata?.title || 'PDF Document'}</div>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontWeight: '700', fontSize: '1.2rem' }}>₹{pdfMetadata?.price}</div>
-                                <div style={{ fontSize: '0.6rem', opacity: 0.8 }}>ID: #RP_{id.slice(-6)}</div>
-                            </div>
-                        </div>
+                        <button
+                            onClick={() => setShowPaymentModal(false)}
+                            style={{
+                                position: 'absolute',
+                                top: '15px',
+                                right: '15px',
+                                background: 'rgba(255,165,0,0.2)',
+                                border: 'none',
+                                color: 'white',
+                                width: '30px',
+                                height: '30px',
+                                borderRadius: '50%',
+                                cursor: 'pointer',
+                                zIndex: 10,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
+                        >✕</button>
 
-                        {/* Razorpay Body */}
-                        <div style={{ padding: 'var(--space-lg)', color: '#1f2937', textAlign: 'center' }}>
+                        <div style={{ padding: 'var(--space-lg)', textAlign: 'center' }}>
+                            <h2 style={{ color: 'white', marginBottom: 'var(--space-sm)' }}>Scan & Pay</h2>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 'var(--space-md)' }}>
+                                Pay ₹{pdfMetadata?.price} via UPI to unlock "{pdfMetadata?.title}"
+                            </p>
+
+                            {/* QR Code Placeholder/Image */}
+                            <div style={{
+                                width: '220px',
+                                height: '220px',
+                                background: 'white',
+                                margin: '0 auto var(--space-lg)',
+                                borderRadius: '15px',
+                                padding: '15px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 0 20px rgba(0,0,0,0.3)'
+                            }}>
+                                <img
+                                    src="/payment_qr.png"
+                                    alt="UPI QR Code"
+                                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                    onError={(e) => {
+                                        e.target.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=upi://pay?pa=${UPI_ID}&pn=${UPI_NAME}&am=${pdfMetadata?.price || 0}&cu=INR`;
+                                    }}
+                                />
+                            </div>
+
+                            {/* UPI Deep Link Button (Mobile Only/Preferred) */}
                             <div style={{ marginBottom: 'var(--space-md)' }}>
-                                <p style={{ fontSize: '0.9rem', color: '#4b5563', marginBottom: 'var(--space-md)' }}>
-                                    Click the button below to complete your payment securely via Razorpay.
+                                <Button
+                                    variant="secondary"
+                                    fullWidth
+                                    onClick={() => {
+                                        const upiUrl = `upi://pay?pa=${UPI_ID}&pn=${UPI_NAME}&am=${pdfMetadata?.price || 0}&cu=INR`;
+                                        window.location.href = upiUrl;
+                                    }}
+                                    style={{
+                                        background: '#3392FF',
+                                        color: 'white',
+                                        borderColor: '#3392FF',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '10px'
+                                    }}
+                                >
+                                    <CreditCard size={18} /> Pay with UPI App (GPay/PhonePe)
+                                </Button>
+                                <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '8px' }}>
+                                    Clicking this will open your UPI app automatically.
                                 </p>
+                            </div>
 
-                                {/* Container for the external script */}
-                                <div id="razorpay-button-container" style={{ minHeight: '60px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                                    {/* Script will be injected here */}
-                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Loading Payment Button...</div>
-                                </div>
+                            <div style={{ margin: 'var(--space-md) 0', borderTop: '1px solid rgba(255,255,255,0.1)' }} />
 
+                            {paymentRequestStatus === 'pending' ? (
                                 <div style={{
-                                    marginTop: '25px',
-                                    borderTop: '1px dashed #ddd',
-                                    paddingTop: '20px',
-                                    background: '#f8fafc',
-                                    padding: '15px',
-                                    borderRadius: '8px'
+                                    padding: '20px',
+                                    background: 'rgba(255,165,0,0.1)',
+                                    borderRadius: '12px',
+                                    border: '1px solid rgba(255,165,0,0.3)',
+                                    color: '#FFA500'
                                 }}>
-                                    <p style={{ fontSize: '0.8rem', fontWeight: '600', color: '#1e293b', marginBottom: '8px' }}>Test Simulation:</p>
-                                    <p style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '15px', lineHeight: '1.4' }}>
-                                        The blue button above is for real payments. To test the <b>Automatic Unlocking</b> without paying real money, use this button:
+                                    <p style={{ fontWeight: '600' }}>Payment Verification Pending</p>
+                                    <p style={{ fontSize: '0.8rem', marginTop: '5px' }}>
+                                        We are verifying your UTR ({utrId}). Access will be granted once approved.
                                     </p>
+                                </div>
+                            ) : paymentRequestStatus === 'rejected' ? (
+                                <div style={{
+                                    padding: '20px',
+                                    background: 'rgba(255,0,0,0.1)',
+                                    borderRadius: '12px',
+                                    border: '1px solid rgba(255,0,0,0.3)',
+                                    color: '#FF4D4D'
+                                }}>
+                                    <p style={{ fontWeight: '600' }}>Verification Failed</p>
+                                    <p style={{ fontSize: '0.8rem', marginTop: '5px' }}>
+                                        Previous request was rejected. Please check your UTR and submit again.
+                                    </p>
+                                    <div style={{ marginTop: '15px' }}>
+                                        <Input
+                                            placeholder="Enter UTR/Transaction ID"
+                                            value={utrId}
+                                            onChange={(e) => setUtrId(e.target.value)}
+                                        />
+                                        <Button
+                                            variant="primary"
+                                            fullWidth
+                                            onClick={submitPaymentRequest}
+                                            style={{ marginTop: '10px' }}
+                                            disabled={isLoading}
+                                        >
+                                            {isLoading ? 'Submitting...' : 'Re-submit UTR'}
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div>
+                                    <div style={{ textAlign: 'left', marginBottom: '15px' }}>
+                                        <label style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', display: 'block', marginBottom: '5px' }}>
+                                            Transaction ID / UTR
+                                        </label>
+                                        <Input
+                                            placeholder="Enter 12-digit UTR number"
+                                            value={utrId}
+                                            onChange={(e) => setUtrId(e.target.value)}
+                                        />
+                                    </div>
+
                                     <Button
                                         variant="primary"
-                                        size="sm"
-                                        onClick={handlePayment}
-                                        style={{ width: '100%', fontSize: '0.85rem', background: 'var(--success)', borderColor: 'var(--success)' }}
+                                        fullWidth
+                                        onClick={submitPaymentRequest}
+                                        disabled={isLoading}
                                     >
-                                        ✅ Simulate Successful Payment
+                                        {isLoading ? 'Submitting...' : 'I have Paid (Submit UTR)'}
                                     </Button>
-                                    {isLoading && <div style={{ marginTop: '10px', fontSize: '0.7rem', color: 'var(--primary)' }}>Verifying payment simulation...</div>}
                                 </div>
+                            )}
+
+                            <div style={{ marginTop: '20px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                <p>🔒 100% Secure Manual Verification</p>
                             </div>
-
-                            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 'var(--space-md)' }}>
-                                🔒 Secure checkout powered by Razorpay. <br />
-                                After payment, please use the <b>Admin Bypass</b> to view the content in this demo.
-                            </p>
-                        </div>
-
-                        {/* Modal Footer */}
-                        <div style={{ padding: 'var(--space-md) var(--space-lg)', background: '#f9fafb', borderTop: '1px solid #e5e7eb' }}>
-                            <Button
-                                variant="ghost"
-                                onClick={() => setShowPaymentModal(false)}
-                                style={{ width: '100%', color: '#6b7280' }}
-                            >
-                                Close
-                            </Button>
                         </div>
                     </div>
                 </div>

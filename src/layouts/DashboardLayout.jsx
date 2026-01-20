@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Layout, Star, Trash2, BookOpen, Menu, X } from 'lucide-react';
+import { LogOut, Layout, Star, Trash2, BookOpen, Menu, X, CreditCard } from 'lucide-react';
 import Button from '../components/Button';
 
 const SidebarItem = ({ icon: Icon, label, active, onClick }) => (
@@ -151,6 +151,15 @@ const DashboardLayout = ({ children, onAddNote }) => {
                                 active={location.pathname === '/admin/upload'}
                                 onClick={() => {
                                     navigate('/admin/upload');
+                                    setIsMobileMenuOpen(false);
+                                }}
+                            />
+                            <SidebarItem
+                                icon={CreditCard}
+                                label="Payment Requests"
+                                active={location.pathname === '/admin/payments'}
+                                onClick={() => {
+                                    navigate('/admin/payments');
                                     setIsMobileMenuOpen(false);
                                 }}
                             />

@@ -5,6 +5,7 @@ import PdfLibrary from './pages/PdfLibrary';
 import PdfViewer from './pages/PdfViewer';
 import StateBoards from './pages/StateBoards';
 import AdminUpload from './pages/AdminUpload';
+import AdminPayments from './pages/AdminPayments';
 import DashboardLayout from './layouts/DashboardLayout';
 import './App.css';
 
@@ -35,6 +36,16 @@ function App() {
             <PrivateRoute>
               <DashboardLayout>
                 <AdminUpload />
+              </DashboardLayout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin/payments"
+          element={
+            <PrivateRoute>
+              <DashboardLayout>
+                <AdminPayments />
               </DashboardLayout>
             </PrivateRoute>
           }

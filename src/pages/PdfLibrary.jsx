@@ -242,10 +242,30 @@ const PdfLibrary = () => {
                                 position: 'relative',
                                 overflow: 'hidden'
                             }}>
-                                {/* Preview Placeholder */}
-                                <div style={{ textAlign: 'center', opacity: 0.5 }}>
+                                {/* PDF Thumbnail via Cloudinary Transformation */}
+                                {pdf.file_url ? (
+                                    <img
+                                        src={pdf.file_url.replace('.pdf', '.jpg').replace('/upload/', '/upload/w_400,h_600,c_limit,pg_1/')}
+                                        alt={pdf.title}
+                                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                        onError={(e) => {
+                                            // Fallback to placeholder if thumbnail fails
+                                            e.target.style.display = 'none';
+                                            e.target.nextSibling.style.display = 'flex';
+                                        }}
+                                    />
+                                ) : null}
+
+                                {/* Preview Placeholder (Fallback) */}
+                                <div style={{
+                                    textAlign: 'center',
+                                    opacity: 0.5,
+                                    display: pdf.file_url ? 'none' : 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center'
+                                }}>
                                     <FileText size={48} />
-                                    <div style={{ fontSize: '0.8rem', marginTop: '8px' }}>PDF Preview</div>
+                                    <div style={{ fontSize: '0.8rem', marginTop: '8px' }}>Preview Not Available</div>
                                 </div>
 
                                 {/* Lock Overlay */}

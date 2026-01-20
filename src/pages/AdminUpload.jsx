@@ -300,11 +300,28 @@ const AdminUpload = () => {
                                         cursor: 'pointer'
                                     }}>
                                         <div style={{
-                                            width: '40px', height: '40px', background: 'rgba(255,255,255,0.05)',
-                                            borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center',
-                                            justifyContent: 'center', color: 'var(--primary)'
+                                            width: '40px',
+                                            height: '40px',
+                                            background: 'rgba(255,255,255,0.05)',
+                                            borderRadius: 'var(--radius-sm)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            color: 'var(--primary)',
+                                            overflow: 'hidden'
                                         }}>
-                                            <Upload size={20} />
+                                            {pdf.file_url ? (
+                                                <img
+                                                    src={pdf.file_url.replace('.pdf', '.jpg').replace('/upload/', '/upload/w_100,h_100,c_limit,pg_1/')}
+                                                    alt={pdf.title}
+                                                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                                    onError={(e) => {
+                                                        e.target.style.display = 'none';
+                                                        e.target.nextSibling.style.display = 'flex';
+                                                    }}
+                                                />
+                                            ) : null}
+                                            <Upload size={20} style={{ display: pdf.file_url ? 'none' : 'block' }} />
                                         </div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <p style={{ fontWeight: '600', fontSize: '0.95rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

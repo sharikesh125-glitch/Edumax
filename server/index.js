@@ -71,6 +71,22 @@ const initDb = async () => {
           );
         `);
 
+        // Create Payment Requests table
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS payment_requests (
+            id SERIAL PRIMARY KEY,
+            user_email TEXT NOT NULL,
+            user_name TEXT,
+            pdf_id TEXT NOT NULL,
+            pdf_title TEXT,
+            utr_id TEXT NOT NULL,
+            amount NUMERIC,
+            status TEXT DEFAULT 'pending', -- pending, approved, rejected
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(utr_id)
+          );
+        `);
+
         console.log('📊 Database structure verified');
     } catch (err) {
         console.error('❌ Failed to initialize database:', err.message);
@@ -244,6 +260,91 @@ app.get('/api/purchases/check', async (req, res) => {
         res.json({ purchased: result.rows.length > 0 });
     } catch (err) {
         res.status(500).json({ error: 'Check failed' });
+    }
+});
+
+// @route POST /api/payment-requests
+app.post('/api/payment-requests', async (req, res) => {
+    console.log('💰 Received payment request:', req.body);
+    const { email, name, pdfId, pdfTitle, utrId, amount } = req.body;
+    if (!email || !pdfId || !utrId) return res.status(400).json({ error: 'Missing required fields' });
+
+    try {
+        await pool.query(
+            'INSERT INTO payment_requests (user_email, user_name, pdf_id, pdf_title, utr_id, amount) VALUES ($1, $2, $3, $4, $5, $6)',
+            [email, name, String(pdfId), pdfTitle, utrId, amount]
+        );
+        console.log('✅ Payment request saved successfully');
+        res.status(201).json({ success: true, message: 'Payment request submitted for verification' });
+    } catch (err) {
+        console.error('❌ Payment request database error:', err);
+        if (err.code === '23505') {
+            return res.status(400).json({ error: 'This UTR/Transaction ID has already been submitted.' });
+        }
+        res.status(500).json({ error: 'Failed to submit payment request' });
+    }
+});
+
+// @route GET /api/payment-requests/status
+app.get('/api/payment-requests/status', async (req, res) => {
+    const { email, pdfId } = req.query;
+    try {
+        const result = await pool.query(
+            'SELECT status FROM payment_requests WHERE user_email = $1 AND pdf_id = $2 ORDER BY created_at DESC LIMIT 1',
+            [email, String(pdfId)]
+        );
+        res.json({ status: result.rows.length > 0 ? result.rows[0].status : null });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch status' });
+    }
+});
+
+// @route GET /api/admin/payment-requests
+app.get('/api/admin/payment-requests', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM payment_requests ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch requests' });
+    }
+});
+
+// @route POST /api/admin/approve-payment
+app.post('/api/admin/approve-payment', async (req, res) => {
+    const { requestId, email, pdfId } = req.body;
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. Update request status
+        await client.query('UPDATE payment_requests SET status = $1 WHERE id = $2', ['approved', requestId]);
+
+        // 2. Add to purchases
+        await client.query(
+            'INSERT INTO purchases (user_email, pdf_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            [email, String(pdfId)]
+        );
+
+        await client.query('COMMIT');
+        res.json({ success: true, message: 'Payment approved and document unlocked' });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('❌ Approval failed:', err);
+        res.status(500).json({ error: 'Approval failed' });
+    } finally {
+        client.release();
+    }
+});
+
+// @route POST /api/admin/reject-payment
+app.post('/api/admin/reject-payment', async (req, res) => {
+    const { requestId } = req.body;
+    try {
+        await pool.query('UPDATE payment_requests SET status = $1 WHERE id = $2', ['rejected', requestId]);
+        res.json({ success: true, message: 'Payment rejected' });
+    } catch (err) {
+        res.status(500).json({ error: 'Rejection failed' });
     }
 });
 
