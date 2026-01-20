@@ -23,6 +23,17 @@ const PdfViewer = () => {
     const [isLoading, setIsLoading] = useState(false);
     const isAdmin = localStorage.getItem('role') === 'admin';
 
+    // Check if previously purchased
+    useEffect(() => {
+        if (id) {
+            const purchases = JSON.parse(localStorage.getItem('edumax_purchases') || '[]');
+            if (purchases.includes(id)) {
+                console.log('Document previously purchased, unlocking');
+                setIsPaid(true);
+            }
+        }
+    }, [id]);
+
     // Injection of modal animation
     useEffect(() => {
         const style = document.createElement('style');
@@ -103,17 +114,51 @@ const PdfViewer = () => {
         setIsLoading(true);
         // Simulate payment processing
         setTimeout(() => {
+            const purchases = JSON.parse(localStorage.getItem('edumax_purchases') || '[]');
+            if (!purchases.includes(id)) {
+                purchases.push(id);
+                localStorage.setItem('edumax_purchases', JSON.stringify(purchases));
+            }
             setIsPaid(true);
             setShowPaymentModal(false);
             setIsLoading(false);
         }, 2000);
     };
 
-    // Prevent right click
+    // Prevent right click, print, and common save/inspect shortcuts
     useEffect(() => {
         const handleContextMenu = (e) => e.preventDefault();
+        const handleKeyDown = (e) => {
+            // Block Ctrl+P (Print)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+                e.preventDefault();
+                alert('Printing is disabled for security.');
+            }
+            // Block Ctrl+S (Save)
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                alert('Saving is disabled for security.');
+            }
+            // Block Ctrl+U (View Source)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'u') {
+                e.preventDefault();
+            }
+            // Block F12 (Dev Tools)
+            if (e.key === 'F12') {
+                e.preventDefault();
+            }
+            // Block Ctrl+Shift+I (Dev Tools)
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'i') {
+                e.preventDefault();
+            }
+        };
+
         document.addEventListener('contextmenu', handleContextMenu);
-        return () => document.removeEventListener('contextmenu', handleContextMenu);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('contextmenu', handleContextMenu);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
     }, []);
 
     if (!metadataLoaded) {
@@ -201,31 +246,48 @@ const PdfViewer = () => {
                                 boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                             }}
                         >
-                            {/* Blur Overlay for unpaid pages > 1 */}
-                            {!isPaid && index > 0 && (
+                            {/* Blur Overlay for unpaid users */}
+                            {!isPaid && (
                                 <div style={{
                                     position: 'absolute',
                                     top: 0,
                                     left: 0,
                                     right: 0,
                                     bottom: 0,
-                                    backdropFilter: 'blur(12px)',
-                                    zIndex: 2,
+                                    backdropFilter: 'blur(30px)',
+                                    WebkitBackdropFilter: 'blur(30px)',
+                                    zIndex: 10,
                                     display: 'flex',
                                     flexDirection: 'column',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    backgroundColor: 'rgba(15, 23, 42, 0.6)',
-                                    color: 'white'
+                                    backgroundColor: 'rgba(5, 10, 20, 0.95)', // Much more opaque
+                                    color: 'white',
+                                    textAlign: 'center',
+                                    padding: 'var(--space-md)'
                                 }}>
-                                    <Lock size={48} style={{ marginBottom: 'var(--space-md)', color: 'var(--accent)' }} />
-                                    <h3 style={{ marginBottom: 'var(--space-sm)' }}>Premium Content</h3>
-                                    <p style={{ marginBottom: 'var(--space-md)', color: 'var(--text-secondary)' }}>
-                                        Purchase full access to view the remaining {numPages - 1} pages.
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: '10%',
+                                        left: '-10%',
+                                        transform: 'rotate(-45deg)',
+                                        fontSize: '8rem',
+                                        fontWeight: '900',
+                                        opacity: 0.1,
+                                        pointerEvents: 'none',
+                                        whiteSpace: 'nowrap'
+                                    }}>SECURE CONTENT</div>
+                                    <Lock size={64} style={{ marginBottom: 'var(--space-md)', color: 'var(--accent)' }} />
+                                    <h2 style={{ marginBottom: 'var(--space-sm)', fontSize: '1.8rem' }}>Document Locked</h2>
+                                    <p style={{ marginBottom: 'var(--space-lg)', color: 'var(--text-secondary)', maxWidth: '300px' }}>
+                                        Access to "{pdfMetadata?.title}" is restricted. Purchase to unlock and read.
                                     </p>
-                                    <Button variant="primary" onClick={() => setShowPaymentModal(true)}>
-                                        Unlock Now - ₹{pdfMetadata?.price || '0'}
+                                    <Button variant="primary" size="lg" onClick={() => setShowPaymentModal(true)} style={{ boxShadow: '0 0 20px var(--accent-glow)' }}>
+                                        Unlock Full PDF - ₹{pdfMetadata?.price || '0'}
                                     </Button>
+                                    <div style={{ marginTop: 'var(--space-xl)', fontSize: '0.7rem', opacity: 0.5 }}>
+                                        Secure Content &copy; Edumax Learning
+                                    </div>
                                 </div>
                             )}
 
