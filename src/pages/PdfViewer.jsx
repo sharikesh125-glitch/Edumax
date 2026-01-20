@@ -21,7 +21,17 @@ const PdfViewer = () => {
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [metadataLoaded, setMetadataLoaded] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [containerWidth, setContainerWidth] = useState(window.innerWidth);
     const isAdmin = localStorage.getItem('role') === 'admin';
+
+    // Handle Responsive Resize
+    useEffect(() => {
+        const handleResize = () => {
+            setContainerWidth(window.innerWidth);
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Check if previously purchased
     useEffect(() => {
@@ -225,7 +235,7 @@ const PdfViewer = () => {
                 overflowY: 'auto',
                 display: 'flex',
                 justifyContent: 'center',
-                padding: 'var(--space-lg)',
+                padding: containerWidth < 768 ? 'var(--space-sm)' : 'var(--space-lg)',
                 position: 'relative',
                 backgroundColor: '#525659' // Standard PDF reader background
             }}>
@@ -308,7 +318,7 @@ const PdfViewer = () => {
                                 pageNumber={index + 1}
                                 renderTextLayer={false} // Disable text selection layer
                                 renderAnnotationLayer={false}
-                                scale={1.2}
+                                width={Math.min(containerWidth - (containerWidth < 768 ? 20 : 80), 850)}
                             />
                         </div>
                     ))}

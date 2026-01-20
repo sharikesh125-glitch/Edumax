@@ -53,7 +53,6 @@ body,
   margin: 0;
   padding: 0;
   overflow: hidden;
-  /* Prevent body scroll, let app handle scrolling */
 }
 
 body {
@@ -84,17 +83,6 @@ button {
   cursor: pointer;
   border: none;
   font-family: inherit;
-}
-
-/* Autofill Hack to match theme */
-input:-webkit-autofill,
-input:-webkit-autofill:hover,
-input:-webkit-autofill:focus,
-input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 30px var(--bg-tertiary) inset !important;
-  -webkit-text-fill-color: var(--text-primary) !important;
-  transition: background-color 5000s ease-in-out 0s;
-  caret-color: var(--text-primary);
 }
 
 /* Utilities */
@@ -140,14 +128,7 @@ input:-webkit-autofill:active {
   gap: var(--space-md);
 }
 
-.text-gradient {
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Responsive Sidebar */
+/* Sidebar & Mobile Layout */
 .sidebar {
   width: 260px;
   border-right: 1px solid var(--glass-border);
@@ -184,6 +165,15 @@ input:-webkit-autofill:active {
   z-index: 45;
 }
 
+/* Responsive Utilities */
+.desktop-only {
+  display: block;
+}
+
+.mobile-only {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .sidebar {
     position: fixed;
@@ -201,11 +191,23 @@ input:-webkit-autofill:active {
     display: block;
   }
 
-  .mobile-only-close {
+  .sidebar-overlay.open {
+    display: block;
+  }
+
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-only {
     display: block !important;
   }
 
-  .sidebar-overlay.open {
-    display: block;
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.25rem; }
+  h3 { font-size: 1.1rem; }
+
+  #root {
+    overflow: auto;
   }
 }
