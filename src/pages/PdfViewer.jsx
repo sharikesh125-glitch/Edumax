@@ -49,16 +49,44 @@ const PdfViewer = () => {
         };
     }, [metadataLoaded]);
 
-    // Check if previously purchased
+    // Check if previously purchased (Database + LocalStorage)
     useEffect(() => {
-        if (id) {
+        const checkPurchaseStatus = async () => {
+            if (!id) return;
+
+            // 1. Check LocalStorage first (Quick)
             const purchases = JSON.parse(localStorage.getItem('edumax_purchases') || '[]');
             if (purchases.includes(id)) {
-                console.log('Document previously purchased, unlocking');
+                console.log('Document previously purchased (local), unlocking');
                 setIsPaid(true);
+                return;
             }
-        }
-    }, [id]);
+
+            // 2. Check Database (Permanent)
+            const userEmail = localStorage.getItem('userEmail');
+            if (userEmail) {
+                try {
+                    console.log('Checking database for purchase status...');
+                    const response = await fetch(`${API_URL}/purchases/check?email=${userEmail}&pdfId=${id}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.purchased) {
+                            console.log('✅ Purchase verified in database, unlocking');
+                            setIsPaid(true);
+
+                            // Also sync to local
+                            purchases.push(id);
+                            localStorage.setItem('edumax_purchases', JSON.stringify(purchases));
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Backend purchase check failed, relying on local state');
+                }
+            }
+        };
+
+        checkPurchaseStatus();
+    }, [id, API_URL]);
 
     // Injection of modal animation
     useEffect(() => {
@@ -140,18 +168,35 @@ const PdfViewer = () => {
 
     const handlePayment = () => {
         setIsLoading(true);
-        // Simulate payment processing
-        setTimeout(() => {
+        setTimeout(async () => {
+            const userEmail = localStorage.getItem('userEmail');
+
+            // 1. Update LocalStorage
             const purchases = JSON.parse(localStorage.getItem('edumax_purchases') || '[]');
             if (!purchases.includes(id)) {
                 purchases.push(id);
                 localStorage.setItem('edumax_purchases', JSON.stringify(purchases));
             }
+
+            // 2. Update Database (only if logged in)
+            if (userEmail) {
+                try {
+                    await fetch(`${API_URL}/purchases`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: userEmail, pdfId: id })
+                    });
+                    console.log('✅ Purchase successfully saved to database for:', userEmail);
+                } catch (err) {
+                    console.error('Failed to save purchase to database');
+                }
+            }
+
             console.log('✅ Payment simulation successful. Unlocking document:', id);
             setIsPaid(true);
             setShowPaymentModal(false);
             setIsLoading(false);
-            alert("✨ Payment Successful! All pages are now unlocked.");
+            alert("✨ Payment Successful! All pages are now unlocked and saved to your account.");
         }, 1500);
     };
 

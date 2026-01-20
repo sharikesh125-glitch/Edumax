@@ -43,21 +43,34 @@ pool.on('error', (err) => {
 // Create tables if they don't exist
 const initDb = async () => {
     try {
+        // Create PDFs table
         await pool.query(`
-      CREATE TABLE IF NOT EXISTS pdfs (
-        id SERIAL PRIMARY KEY,
-        title TEXT NOT NULL,
-        author TEXT DEFAULT 'Unknown',
-        price NUMERIC DEFAULT 0,
-        category TEXT NOT NULL,
-        description TEXT,
-        cloudinary_id TEXT NOT NULL,
-        file_url TEXT NOT NULL,
-        file_name TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        locked BOOLEAN DEFAULT TRUE
-      );
-    `);
+          CREATE TABLE IF NOT EXISTS pdfs (
+            id SERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            author TEXT DEFAULT 'Unknown',
+            price NUMERIC DEFAULT 0,
+            category TEXT NOT NULL,
+            description TEXT,
+            cloudinary_id TEXT NOT NULL,
+            file_url TEXT NOT NULL,
+            file_name TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            locked BOOLEAN DEFAULT TRUE
+          );
+        `);
+
+        // Create Purchases table
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS purchases (
+            id SERIAL PRIMARY KEY,
+            user_email TEXT NOT NULL,
+            pdf_id TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_email, pdf_id)
+          );
+        `);
+
         console.log('📊 Database structure verified');
     } catch (err) {
         console.error('❌ Failed to initialize database:', err.message);
@@ -127,19 +140,16 @@ app.post('/api/pdfs', upload.single('file'), async (req, res) => {
 
         console.log(`✅ PDF Metadata saved: ${savedPdf.title}`);
 
-        // Map PostgreSQL snake_case to frontend expected camelCase if necessary
-        // Frontend expects _id and fileId
         const responseData = {
             ...savedPdf,
             _id: savedPdf.id,
-            fileId: savedPdf.id // Using database ID as fileId reference
+            fileId: savedPdf.id
         };
 
         res.status(201).json(responseData);
 
     } catch (err) {
         console.error('❌ Upload Workflow Failure:', err);
-        // Ensure we always return JSON
         res.status(500).json({
             error: 'Server failed to process upload',
             details: err.message || 'Unknown error during file processing'
@@ -148,11 +158,9 @@ app.post('/api/pdfs', upload.single('file'), async (req, res) => {
 });
 
 // @route GET /api/pdfs
-// @desc  Fetch all PDF metadata from Neon
 app.get('/api/pdfs', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM pdfs ORDER BY created_at DESC');
-        // Map for frontend compatibility
         const pdfs = result.rows.map(pdf => ({
             ...pdf,
             _id: pdf.id,
@@ -166,7 +174,6 @@ app.get('/api/pdfs', async (req, res) => {
 });
 
 // @route GET /api/pdfs/file/:id
-// @desc  Get PDF file URL (Redirect to Cloudinary for simplicity, or proxy it)
 app.get('/api/pdfs/file/:id', async (req, res) => {
     try {
         const id = req.params.id;
@@ -175,9 +182,6 @@ app.get('/api/pdfs/file/:id', async (req, res) => {
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Document not found' });
         }
-
-        // Direct redirect to Cloudinary URL
-        // In a production app with paid content, you'd want to use signed URLs or stream the content
         res.redirect(result.rows[0].file_url);
     } catch (err) {
         console.error('❌ Stream engine error:', err);
@@ -186,12 +190,9 @@ app.get('/api/pdfs/file/:id', async (req, res) => {
 });
 
 // @route DELETE /api/pdfs/:id
-// @desc  Delete PDF from Cloudinary and Neon
 app.delete('/api/pdfs/:id', async (req, res) => {
     try {
         const id = req.params.id;
-
-        // 1. Get cloudinary info
         const result = await pool.query('SELECT cloudinary_id FROM pdfs WHERE id = $1', [id]);
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'PDF not found' });
@@ -199,21 +200,50 @@ app.delete('/api/pdfs/:id', async (req, res) => {
 
         const cloudinaryId = result.rows[0].cloudinary_id;
 
-        // 2. Delete from Cloudinary
         try {
-            // For 'raw' files, we need to specify resource_type
-            await cloudinary.uploader.destroy(cloudinaryId, { resource_type: 'raw' });
+            await cloudinary.uploader.destroy(cloudinaryId, { resource_type: 'image' });
         } catch (cloudinaryErr) {
             console.warn('⚠️ Cloudinary cleanup warning:', cloudinaryErr.message);
         }
 
-        // 3. Delete from Database
         await pool.query('DELETE FROM pdfs WHERE id = $1', [id]);
-
         res.json({ message: 'PDF deleted successfully' });
     } catch (err) {
         console.error('❌ Delete failed:', err);
         res.status(500).json({ error: 'Failed to delete PDF' });
+    }
+});
+
+// @route POST /api/purchases
+app.post('/api/purchases', async (req, res) => {
+    const { email, pdfId } = req.body;
+    if (!email || !pdfId) return res.status(400).json({ error: 'Missing email or pdfId' });
+
+    try {
+        await pool.query(
+            'INSERT INTO purchases (user_email, pdf_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            [email, String(pdfId)]
+        );
+        res.status(201).json({ success: true });
+    } catch (err) {
+        console.error('❌ Purchase record failed:', err);
+        res.status(500).json({ error: 'Failed to record purchase' });
+    }
+});
+
+// @route GET /api/purchases/check
+app.get('/api/purchases/check', async (req, res) => {
+    const { email, pdfId } = req.query;
+    if (!email || !pdfId) return res.status(400).json({ error: 'Missing email or pdfId' });
+
+    try {
+        const result = await pool.query(
+            'SELECT * FROM purchases WHERE user_email = $1 AND pdf_id = $2',
+            [email, String(pdfId)]
+        );
+        res.json({ purchased: result.rows.length > 0 });
+    } catch (err) {
+        res.status(500).json({ error: 'Check failed' });
     }
 });
 
