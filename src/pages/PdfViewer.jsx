@@ -212,6 +212,24 @@ const PdfViewer = () => {
                 justifyContent: 'space-between',
                 zIndex: 10
             }}>
+                {isPaid && pdfMetadata?.price > 0 && (
+                    <div style={{
+                        position: 'absolute',
+                        bottom: '-40px',
+                        left: '0',
+                        right: '0',
+                        backgroundColor: 'var(--success)',
+                        color: 'white',
+                        padding: '8px',
+                        textAlign: 'center',
+                        fontSize: '0.8rem',
+                        fontWeight: '600',
+                        zIndex: 5,
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                    }}>
+                        ✨ Payment Verified: Full Document Unlocked
+                    </div>
+                )}
                 <div className="flex items-center gap-sm">
                     <Button variant="ghost" onClick={() => navigate('/library')}>
                         <ArrowLeft size={20} /> Back
@@ -404,16 +422,27 @@ const PdfViewer = () => {
                                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Loading Payment Button...</div>
                                 </div>
 
-                                <div style={{ marginTop: '20px', borderTop: '1px dashed #eee', paddingTop: '15px' }}>
-                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '10px' }}>Admin/Testing only:</p>
+                                <div style={{
+                                    marginTop: '25px',
+                                    borderTop: '1px dashed #ddd',
+                                    paddingTop: '20px',
+                                    background: '#f8fafc',
+                                    padding: '15px',
+                                    borderRadius: '8px'
+                                }}>
+                                    <p style={{ fontSize: '0.8rem', fontWeight: '600', color: '#1e293b', marginBottom: '8px' }}>Test Simulation:</p>
+                                    <p style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '15px', lineHeight: '1.4' }}>
+                                        The blue button above is for real payments. To test the <b>Automatic Unlocking</b> without paying real money, use this button:
+                                    </p>
                                     <Button
-                                        variant="secondary"
+                                        variant="primary"
                                         size="sm"
                                         onClick={handlePayment}
-                                        style={{ width: '100%', fontSize: '0.8rem' }}
+                                        style={{ width: '100%', fontSize: '0.85rem', background: 'var(--success)', borderColor: 'var(--success)' }}
                                     >
-                                        Click here to Simulate Successful Payment
+                                        ✅ Simulate Successful Payment
                                     </Button>
+                                    {isLoading && <div style={{ marginTop: '10px', fontSize: '0.7rem', color: 'var(--primary)' }}>Verifying payment simulation...</div>}
                                 </div>
                             </div>
 
