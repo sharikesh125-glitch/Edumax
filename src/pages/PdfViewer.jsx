@@ -277,7 +277,9 @@ const PdfViewer = () => {
                                 marginBottom: '20px',
                                 position: 'relative',
                                 boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                                width: 'fit-content' // Ensure container matches PDF width
+                                width: '100%',
+                                maxWidth: `${pageWidth}px`,
+                                margin: '0 auto 20px auto'
                             }}
                         >
                             {/* Blur Overlay for unpaid pages > 1 */}
@@ -295,17 +297,18 @@ const PdfViewer = () => {
                                     flexDirection: 'column',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    backgroundColor: 'rgba(5, 10, 20, 0.95)', // Much more opaque
+                                    backgroundColor: 'rgba(5, 10, 20, 0.95)',
                                     color: 'white',
                                     textAlign: 'center',
-                                    padding: 'var(--space-md)'
+                                    padding: 'var(--space-md)',
+                                    overflow: 'hidden' // Contain the watermark
                                 }}>
                                     <div style={{
                                         position: 'absolute',
-                                        top: '10%',
-                                        left: '-10%',
+                                        top: '15%',
+                                        left: '-20%',
                                         transform: 'rotate(-45deg)',
-                                        fontSize: '8rem',
+                                        fontSize: containerWidth < 768 ? '4rem' : '8rem',
                                         fontWeight: '900',
                                         opacity: 0.1,
                                         pointerEvents: 'none',
