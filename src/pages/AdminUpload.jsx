@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 
 const AdminUpload = () => {
     const navigate = useNavigate();
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const API_URL = import.meta.env.VITE_API_URL || '/api';
 
     const [formData, setFormData] = useState({
         title: '',
@@ -57,7 +57,7 @@ const AdminUpload = () => {
                 });
 
                 if (response.ok) {
-                    console.log('Admin: Deleted from MongoDB');
+                    console.log('Admin: Deleted from Database');
                     window.dispatchEvent(new CustomEvent('edumax-sync', { detail: { action: 'delete', id } }));
                     loadManagedPdfs();
                 } else {
@@ -109,12 +109,15 @@ const AdminUpload = () => {
                 loadManagedPdfs();
                 setTimeout(() => setStatus(null), 3000);
             } else {
-                throw new Error('Upload failed');
+                const errorData = await response.json().catch(() => ({ error: 'Unknown server error' }));
+                console.error('Admin: Server Error Response:', errorData);
+                throw new Error(errorData.error || errorData.details || 'Upload failed');
             }
         } catch (err) {
             console.error('Admin: Upload failed:', err);
-            alert('Could not save PDF to MongoDB.');
+            alert(`Could not save PDF to Database: ${err.message}`);
             setStatus('error');
+
         } finally {
             setLoading(false);
         }

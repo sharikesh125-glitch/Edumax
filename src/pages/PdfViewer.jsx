@@ -13,7 +13,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 const PdfViewer = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const API_URL = import.meta.env.VITE_API_URL || '/api';
 
     const [numPages, setNumPages] = useState(null);
     const [pdfMetadata, setPdfMetadata] = useState(null);

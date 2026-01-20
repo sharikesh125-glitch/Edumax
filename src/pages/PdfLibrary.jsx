@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import DashboardLayout from '../layouts/DashboardLayout';
-import { FileText, Lock, Unlock, Trash2 } from 'lucide-react';
+import { FileText, Lock, Unlock, Trash2, Share2 } from 'lucide-react';
 import Button from '../components/Button';
 
 const PdfLibrary = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const API_URL = import.meta.env.VITE_API_URL || '/api';
 
     const [pdfs, setPdfs] = useState([]);
     const [isSyncing, setIsSyncing] = useState(false);
@@ -25,7 +25,7 @@ const PdfLibrary = () => {
             const response = await fetch(`${API_URL}/pdfs`);
             if (response.ok) {
                 const data = await response.json();
-                console.log(`Library: Fetched ${data.length} PDFs from MongoDB`);
+                console.log(`Library: Fetched ${data.length} PDFs from Database`);
                 setPdfs(data);
             }
 
@@ -66,6 +66,14 @@ const PdfLibrary = () => {
         navigate(`/pdf/${pdf._id}`);
     };
 
+    const handleShare = (e, pdf) => {
+        e.stopPropagation();
+        const shareUrl = `${window.location.origin}/pdf/${pdf._id}`;
+        const message = `Check out this document on Edumax: ${pdf.title}\n\nRead it here: ${shareUrl}`;
+        const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+        window.open(whatsappUrl, '_blank');
+    };
+
     const deletePdf = async (e, id) => {
         e.stopPropagation();
         if (window.confirm('Delete this PDF permanently?')) {
@@ -85,7 +93,7 @@ const PdfLibrary = () => {
     };
 
     const resetLibrary = () => {
-        alert('Library reset is handled by clearing MongoDB database manually or deleting individual items.');
+        alert('Library reset is handled by clearing the Database manually or deleting individual items.');
     };
 
     return (
@@ -273,9 +281,20 @@ const PdfLibrary = () => {
                                 }}>
                                     {Number(pdf.price) > 0 ? `₹${pdf.price}` : 'Free'}
                                 </span>
-                                <Button size="sm" variant={Number(pdf.price) > 0 ? 'primary' : 'secondary'}>
-                                    {Number(pdf.price) > 0 ? 'Buy Now' : 'Read'}
-                                </Button>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        style={{ padding: '8px', minWidth: 'auto' }}
+                                        onClick={(e) => handleShare(e, pdf)}
+                                        title="Share on WhatsApp"
+                                    >
+                                        <Share2 size={18} color="#25D366" />
+                                    </Button>
+                                    <Button size="sm" variant={Number(pdf.price) > 0 ? 'primary' : 'secondary'}>
+                                        {Number(pdf.price) > 0 ? 'Buy Now' : 'Read'}
+                                    </Button>
+                                </div>
                             </div>
                         </div>
                     ))}
