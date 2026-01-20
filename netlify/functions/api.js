@@ -97,7 +97,11 @@ router.post('/pdfs', upload.single('file'), async (req, res) => {
 
         res.status(201).json({ ...savedPdf, _id: savedPdf.id, fileId: savedPdf.id });
     } catch (err) {
-        res.status(500).json({ error: 'Upload failed', details: err.message });
+        console.error('❌ Upload Workflow Failure:', err);
+        res.status(500).json({
+            error: 'Failed to process PDF upload',
+            details: err.message
+        });
     }
 });
 
@@ -136,6 +140,9 @@ router.delete('/pdfs/:id', async (req, res) => {
     }
 });
 
-app.use('/.netlify/functions/api', router); // Important for path mapping on Netlify
+// Mount router for both local dev and production Netlify paths
+app.use('/.netlify/functions/api', router);
+app.use('/api', router);
+app.use('/', router);
 
 export const handler = serverless(app);

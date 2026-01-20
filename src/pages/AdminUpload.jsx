@@ -109,10 +109,11 @@ const AdminUpload = () => {
                 loadManagedPdfs();
                 setTimeout(() => setStatus(null), 3000);
             } else {
-                console.error(`Admin: Server Error ${response.status}:`, response.statusText);
                 const errorData = await response.json().catch(() => ({ error: 'Could not parse server error JSON' }));
-                console.error('Admin: Server Error Response Body:', errorData);
-                throw new Error(errorData.error || errorData.details || `Server returned ${response.status}`);
+                const combinedError = errorData.error && errorData.details
+                    ? `${errorData.error} (${errorData.details})`
+                    : (errorData.error || errorData.details || `Server returned ${response.status}`);
+                throw new Error(combinedError);
             }
         } catch (err) {
             console.error('Admin: Upload failed:', err);
