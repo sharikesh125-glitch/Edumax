@@ -14,7 +14,7 @@ const PdfViewer = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const API_URL = import.meta.env.VITE_API_URL || '/api';
-    const UPI_ID = import.meta.env.VITE_UPI_ID || 'edumax@upi';
+    const UPI_ID = import.meta.env.VITE_UPI_ID || 'vivekpanjab5445@ybl';
     const UPI_NAME = import.meta.env.VITE_UPI_NAME || 'Edumax';
 
     const [numPages, setNumPages] = useState(null);
