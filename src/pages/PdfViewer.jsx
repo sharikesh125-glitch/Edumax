@@ -211,7 +211,7 @@ const PdfViewer = () => {
         loadMetadata();
     }, [id, isAdmin]);
 
-    const pdfFile = pdfMetadata?.fileId ? `${API_URL}/pdfs/file/${pdfMetadata.fileId}` : null;
+    const pdfFile = pdfMetadata?.fileId ? `${API_URL}/pdfs/file/${pdfMetadata.fileId}?email=${encodeURIComponent(userEmail)}` : null;
 
     const onDocumentLoadSuccess = ({ numPages }) => {
         setNumPages(numPages);

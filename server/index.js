@@ -102,7 +102,7 @@ const storage = new CloudinaryStorage({
         format: async (req, file) => 'pdf', // force pdf
         public_id: (req, file) => `${Date.now()}-${file.originalname.replace(/\.[^/.]+$/, "")}`,
         resource_type: 'image',
-        access_mode: 'public'
+        access_mode: 'authenticated'
     },
 });
 
@@ -193,15 +193,45 @@ app.get('/api/pdfs', async (req, res) => {
 app.get('/api/pdfs/file/:id', async (req, res) => {
     try {
         const id = req.params.id;
-        const result = await pool.query('SELECT file_url FROM pdfs WHERE id = $1', [id]);
+        const userEmail = req.query.email;
 
-        if (result.rows.length === 0) {
+        // 1. Fetch PDF Metadata
+        const pdfResult = await pool.query('SELECT * FROM pdfs WHERE id = $1', [id]);
+        if (pdfResult.rows.length === 0) {
             return res.status(404).json({ error: 'Document not found' });
         }
-        res.redirect(result.rows[0].file_url);
+        const pdf = pdfResult.rows[0];
+
+        // 2. Security Check: If it's a paid document, verify purchase
+        if (pdf.price > 0) {
+            if (!userEmail) {
+                return res.status(403).json({ error: 'Authentication required for paid documents' });
+            }
+
+            const purchaseCheck = await pool.query(
+                'SELECT * FROM purchases WHERE user_email = $1 AND pdf_id = $2',
+                [userEmail, String(id)]
+            );
+
+            if (purchaseCheck.rows.length === 0) {
+                return res.status(403).json({ error: 'Access denied: Payment not verified for this document' });
+            }
+        }
+
+        // 3. Generate Secure Signed URL (Expires in 1 hour)
+        // Note: For this to be fully secure, Cloudinary assets should be "private" or "authenticated"
+        const signedUrl = cloudinary.url(pdf.cloudinary_id, {
+            sign_url: true,
+            resource_type: 'image',
+            expires_at: Math.floor(Date.now() / 1000) + 3600 // 1 hour from now
+        });
+
+        console.log(`🔒 Secure access granted to ${userEmail || 'Anonymous'} for: ${pdf.title}`);
+        res.redirect(signedUrl);
+
     } catch (err) {
-        console.error('❌ Stream engine error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('❌ Secure Stream Engine Error:', err);
+        res.status(500).json({ error: 'Internal server error while securing document' });
     }
 });
 
